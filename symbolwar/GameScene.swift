@@ -254,13 +254,15 @@ class GameScene: SKScene {
             // シンボルの操作を許可
             for touch in touches {
                 let location = touch.locationInNode(self)
-                let node = self.nodeAtPoint(location);
-                if let n = node.name {
-                    let index = Int(n);
-                    if let pdeck_index = index {
-                        if let deck = player_deck[pdeck_index] {
-                            pick_node[touch] = PICK_NODE(symbol: deck, pdeck_index: pdeck_index);
-                            break;
+                let nodes = self.nodesAtPoint(location);
+                for_nodes: for node in nodes {
+                    if let n = node.name {
+                        let index = Int(n);
+                        if let pdeck_index = index {
+                            if let deck = player_deck[pdeck_index] {
+                                pick_node[touch] = PICK_NODE(symbol: deck, pdeck_index: pdeck_index);
+                                break for_nodes;
+                            }
                         }
                     }
                 }
@@ -519,6 +521,7 @@ class GameScene: SKScene {
     
     struct ATTACK_LOG {
         var attacker_symbol: Symbol;
+        var damage: Int;
         var victim_symbols: [Symbol];
     }
     var attack_logs: [Int: ATTACK_LOG] = [:];
@@ -597,7 +600,7 @@ class GameScene: SKScene {
                     continue;
                 }
                 
-                let attack_log = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, victim_symbols: victims);
+                let attack_log = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, damage:attacker_symbol.symbol.param.atk, victim_symbols: victims);
                 attack_logs[attack_logs.count] = attack_log;
                 
                 //アニメーション開始しちゃう
@@ -616,7 +619,7 @@ class GameScene: SKScene {
                 sequence.append(SKAction.waitForDuration(0.5));
                 sequence.append(SKAction.runBlock({
                         for victim in attack_log.victim_symbols {
-                            self.victimDamage(victim);
+                            self.victimDamage(victim, damage:attack_log.damage);
                         }
                     }, queue: dispatch_get_main_queue()));
                 // カウンターありの場合
@@ -629,7 +632,7 @@ class GameScene: SKScene {
                 if counter_count > 0 {
                     sequence.append(SKAction.waitForDuration(0.3));
                     sequence.append(SKAction.runBlock({
-                        self.victimDamage(attacker_symbol.symbol, count: counter_count);
+                        self.victimDamage(attacker_symbol.symbol, damage:attack_log.damage, count: counter_count);
                         }, queue: dispatch_get_main_queue())
                     );
                 }
@@ -670,7 +673,7 @@ class GameScene: SKScene {
             );
         }
     }
-    func victimDamage(victim: Symbol, count: Int = 1) -> Void {
+    func victimDamage(victim: Symbol, damage: Int, count: Int = 1) -> Void {
         
         let flashing = SKAction.sequence([
             SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
@@ -681,7 +684,16 @@ class GameScene: SKScene {
         victim.sprite.runAction(SKAction.sequence([flashing]), completion: {
             
             for i in 0 ..< count {
-                let damage_label = SKLabelNode(text: "-1");
+                
+                // 実際のダメージ
+                victim.param.hp -= damage;
+                if victim.param.hp < 0 {
+                    victim.param.hp = 0;
+                }
+                victim.updateParamSprite();
+
+                let damage_label = SKLabelNode(text: "-\(damage)");
+                damage_label.fontName = "HelveticaNeue-Bold";
                 damage_label.fontSize = 14.0;
                 damage_label.fontColor = UIColor.redColor();
                 damage_label.position = victim.sprite.position;
@@ -691,9 +703,6 @@ class GameScene: SKScene {
                 let move = SKAction.moveToY(victim.sprite.position.y + 10, duration: 1.0);
                 damage_label.runAction(SKAction.sequence([wait, move, flashing]), completion: {
                     damage_label.removeFromParent();
-                    
-                    // 実際のダメージ
-                    victim.param.hp -= 1;
                 });
             }
         });
@@ -758,16 +767,19 @@ class GameScene: SKScene {
             let symbols = field_symbols[t]!;
             for i in symbols.keys {
                 let symbol = symbols[i]!;
+                if symbol.symbol.counter {
+                    continue;
+                }
                 var remove = false;
                 if symbol.player && symbol.symbol.rc.r == rows-1 {
                     // TODO:相手ダメージ演出
-                    enemy_hp -= symbol.symbol.param.atk;
+                    enemy_hp -= symbol.symbol.param.hp;
                     print("enemy lastHP:\(enemy_hp)");
                     remove = true;
                 }
                 else if symbol.enemy && symbol.symbol.rc.r == 0 {
                     // TODO:自分ダメージ演出
-                    player_hp -= symbol.symbol.param.atk;
+                    player_hp -= symbol.symbol.param.hp;
                     print("player lastHP:\(player_hp)");
                     remove = true;
                 }
