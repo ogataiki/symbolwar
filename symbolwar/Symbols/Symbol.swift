@@ -43,21 +43,15 @@ class Symbol {
     var image_name = "";
     var sprite = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: Symbol.size, height: Symbol.size));
     
-    var sprite_back = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: Symbol.size, height: Symbol.size));
-
     var player = false;
     func setPlayerMode() {
         player = true;
-        sprite_back.color = UIColor.greenColor();
-        sprite_back.blendMode = SKBlendMode.Screen;
     }
     var enemy = false;
     func setEnemyMode() {
         enemy = true;
         sprite.yScale = -1;
         sprite.blendMode = SKBlendMode.Subtract;
-        sprite_back.color = UIColor.orangeColor();
-        sprite_back.blendMode = SKBlendMode.Screen;
     }
     
     var deploy_turn: Int = 0;

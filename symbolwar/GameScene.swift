@@ -15,14 +15,14 @@ class GameScene: SKScene {
         Field(r:6, c:0), Field(r:6, c:1), Field(r:6, c:2), Field(r:6, c:3), Field(r:6, c:4),
         Field(r:7, c:0), Field(r:7, c:1), Field(r:7, c:2), Field(r:7, c:3), Field(r:7, c:4),
     ];
-    func getFieldsIndex(r: Int, _ c: Int) -> Int {
-        return (r * columns) + c;
+    func getFieldsIndex(rc: (r:Int, c:Int)) -> Int {
+        return (rc.r * columns) + rc.c;
     }
     func getFieldsRC(index: Int) -> (r: Int, c: Int) {
         return (index/columns, index%columns);
     }
-    func getFieldsPosition(r: Int, _ c: Int) -> CGPoint {
-        return fields[getFieldsIndex(r, c)].sprite.position;
+    func getFieldsPosition(rc: (r:Int, c:Int)) -> CGPoint {
+        return fields[getFieldsIndex(rc)].sprite.position;
     }
     func getFieldsPosition(index: Int) -> CGPoint {
         return fields[index].sprite.position;
@@ -480,11 +480,11 @@ class GameScene: SKScene {
                 move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol.symbol, fromRow:beforRow, toRow: nextRow));
                 deploy_symbol.symbol.rc = (r:nextRow, c:deploy_symbol.symbol.rc.c);
                 
-                fields[getFieldsIndex(nextRow, deploy_symbol.symbol.rc.c)].symbol = deploy_symbol.symbol;
-                fields[getFieldsIndex(beforRow, deploy_symbol.symbol.rc.c)].symbol = nil;
+                fields[getFieldsIndex((r:nextRow, c:deploy_symbol.symbol.rc.c))].symbol = deploy_symbol.symbol;
+                fields[getFieldsIndex((r:beforRow, c:deploy_symbol.symbol.rc.c))].symbol = nil;
                 
                 let wait = SKAction.waitForDuration(0.4*NSTimeInterval(t)+0.2*NSTimeInterval(i));
-                let moveto = SKAction.moveTo(getFieldsPosition(nextRow, deploy_symbol.symbol.rc.c), duration: 0.4);
+                let moveto = SKAction.moveTo(getFieldsPosition((r:nextRow, c:deploy_symbol.symbol.rc.c)), duration: 0.4);
                 let endf = SKAction.runBlock({ 
                     print("move end \(nextRow),\(deploy_symbol.symbol.rc.c)");
                 })
@@ -533,20 +533,25 @@ class GameScene: SKScene {
                         }
                     }
                     let target = target_pos_list[tkey]!;
-                    let target_pos_r = attacker_symbol.symbol.rc.r + (attacker_symbol.player ? target.r : (target.r*(-1)));
-                    let target_pos_c = attacker_symbol.symbol.rc.c + (attacker_symbol.player ? target.c : (target.c*(-1)));
-                    print("\(#function) target:r\(target_pos_r), c\(target_pos_c)");
+                    let target_pos: (r:Int, c:Int);
+                    if attacker_symbol.player {
+                        target_pos = (attacker_symbol.symbol.rc.r + target.r, attacker_symbol.symbol.rc.c + target.c);
+                    }
+                    else {
+                        target_pos = (attacker_symbol.symbol.rc.r + (target.r*(-1)), attacker_symbol.symbol.rc.c + (target.c*(-1)));
+                    }
+                    print("\(#function) target_pos:\(target_pos)");
                     // 範囲外と図形なしをチェック
-                    if (target_pos_r < 0 || target_pos_r >= rows) || (target_pos_c < 0 || target_pos_c >= columns) {
+                    if (target_pos.r < 0 || target_pos.r >= rows) || (target_pos.c < 0 || target_pos.c >= columns) {
                         print("continue out of range");
                         continue;
                     }
-                    if fields[getFieldsIndex(target_pos_r, target_pos_c)].symbol == nil {
+                    if fields[getFieldsIndex(target_pos)].symbol == nil {
                         print("continue no symbol");
                         continue;
                     }
                     print("hit!");
-                    let victim = fields[getFieldsIndex(target_pos_r, target_pos_c)].symbol!;
+                    let victim = fields[getFieldsIndex(target_pos)].symbol!;
                     
                     // 自軍攻撃をしないようチェック
                     var is_attack_ok = false;
@@ -659,7 +664,7 @@ class GameScene: SKScene {
                 let symbol = field_symbols[t]![i]!.symbol;
                 if symbol.param.hp <= 0 {
                     // 消失
-                    fields[getFieldsIndex(symbol.rc.r, symbol.rc.c)].symbol = nil;
+                    fields[getFieldsIndex(symbol.rc)].symbol = nil;
                     field_symbols[symbol.deploy_turn]!.removeValueForKey(symbol.deploy_index);
                     if field_symbols[symbol.deploy_turn]!.count == 0 {
                         field_symbols.removeValueForKey(symbol.deploy_turn);
