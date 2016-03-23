@@ -450,9 +450,11 @@ class GameScene: SKScene {
     }
     var move_log: [MOVE_SYMBOL_LOG] = [];
     var move_finish: Int = 0;
+    var move_total: Int = 0;
     func updateMoveSymbol_Start() {
         move_log = [];
         move_finish = 0;
+        move_total = 0;
         for t in field_symbols.keys {
             var i = 0;
             for op in field_symbols[t]!.keys {
@@ -473,6 +475,8 @@ class GameScene: SKScene {
                 }
                 else { continue; } // 移動しない
                 
+                move_total += 1;
+                
                 move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol.symbol, fromRow:beforRow, toRow: nextRow));
                 deploy_symbol.symbol.rc = (r:nextRow, c:deploy_symbol.symbol.rc.c);
                 
@@ -481,8 +485,12 @@ class GameScene: SKScene {
                 
                 let wait = SKAction.waitForDuration(0.4*NSTimeInterval(t)+0.2*NSTimeInterval(i));
                 let moveto = SKAction.moveTo(getFieldsPosition(nextRow, deploy_symbol.symbol.rc.c), duration: 0.4);
-                deploy_symbol.symbol.sprite.runAction(SKAction.sequence([wait, moveto]), completion: {
+                let endf = SKAction.runBlock({ 
+                    print("move end \(nextRow),\(deploy_symbol.symbol.rc.c)");
+                })
+                deploy_symbol.symbol.sprite.runAction(SKAction.sequence([wait, moveto, endf]), completion: {
                     self.move_finish += 1;
+                    print("move_finish");
                 });
                 
                 i += 1;
@@ -492,7 +500,8 @@ class GameScene: SKScene {
     }
     func updateMoveSymbol() {
         // 先に配置した図形(field_symbolsの順)に移動を処理する
-        if move_finish >= field_symbols.count {
+        if move_finish >= move_total {
+            print(" --- attack start ---");
             updateAttackSymbol_Start();
         }
     }
@@ -503,6 +512,7 @@ class GameScene: SKScene {
     }
     var attack_logs: [Int: ATTACK_LOG] = [:];
     var attack_finish: Int = 0;
+    var attack_effect_duration = 0.05;
     func updateAttackSymbol_Start() {
         // アタックログの生成とアニメーション開始
         let target_pos_list: [String: (r:Int, c:Int)] = [
@@ -523,8 +533,8 @@ class GameScene: SKScene {
                         }
                     }
                     let target = target_pos_list[tkey]!;
-                    let target_pos_r = attacker_symbol.symbol.rc.r + target.r;
-                    let target_pos_c = attacker_symbol.symbol.rc.c + target.c;
+                    let target_pos_r = attacker_symbol.symbol.rc.r + (attacker_symbol.player ? target.r : (target.r*(-1)));
+                    let target_pos_c = attacker_symbol.symbol.rc.c + (attacker_symbol.player ? target.c : (target.c*(-1)));
                     print("\(#function) target:r\(target_pos_r), c\(target_pos_c)");
                     // 範囲外と図形なしをチェック
                     if (target_pos_r < 0 || target_pos_r >= rows) || (target_pos_c < 0 || target_pos_c >= columns) {
@@ -548,24 +558,43 @@ class GameScene: SKScene {
                     }
                     else { print("\(#function) symbol error attacker:\(attacker_symbol.symbol.rc) or victim:\(victim.rc) ?"); continue; } // バグってる。処理しない。
                     
-                    
-
-                    attack_logs[attack_logs.count] = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, victim_symbol: victim);
-
+                
                     if is_attack_ok {
+
+                        attack_logs[attack_logs.count] = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, victim_symbol: victim);
+                        
                         //アニメーション開始しちゃう
-                        let wait = SKAction.waitForDuration(0.5 * NSTimeInterval(attack_index));
-                        let flashing = SKAction.sequence([
-                            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-                            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-                            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-                        ]);
-                        let damage = SKAction.runBlock({
-                            self.victimDamage(victim)
-                        }, queue: dispatch_get_main_queue());
-                        victim.sprite.runAction(SKAction.sequence([wait, flashing, damage]), completion: {
-                            self.attack_finish += 1;
-                        });
+                        var sequence: [SKAction] = [];
+                        sequence.append(SKAction.waitForDuration(4.0 * NSTimeInterval(attack_index)));
+                        sequence.append(SKAction.sequence([
+                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                            ])
+                        );
+                        sequence.append(SKAction.waitForDuration(0.5));
+                        sequence.append(SKAction.runBlock({
+                            self.attackFieldFlashing(victim, victim: true);
+                        }));
+                        sequence.append(SKAction.waitForDuration(0.8));
+                        sequence.append(SKAction.runBlock({
+                            self.victimDamage(victim);
+                        }, queue: dispatch_get_main_queue()));
+                        // カウンターありの場合
+                        if victim.counter {
+                            sequence.append(SKAction.waitForDuration(0.3));
+                            sequence.append(SKAction.runBlock({
+                                self.victimDamage(attacker_symbol.symbol);
+                                }, queue: dispatch_get_main_queue())
+                            );
+                        }
+                        sequence.append(SKAction.waitForDuration(1.5));
+                        attacker_symbol.symbol.sprite.runAction(
+                            SKAction.sequence(sequence),
+                            completion: {
+                                self.attack_finish += 1;
+                            }
+                        );
                         
                         attack_index += 1;
                     }
@@ -575,24 +604,53 @@ class GameScene: SKScene {
 
         chgSceneSts(.attack_symbol);
     }
-    func victimDamage(victim: Symbol) -> Void {
-        let damage_label = SKLabelNode(text: "-1");
-        damage_label.fontSize = 8.0;
-        damage_label.fontColor = UIColor.redColor();
-        damage_label.position = victim.sprite.position;
-        addChild(damage_label);
+    func attackFieldFlashing(symbol: Symbol, victim: Bool) {
+        // 攻撃側と被害側の背景を点滅させる
+        let sprite = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: Symbol.size, height: Symbol.size));
+        sprite.position = symbol.sprite.position;
+        sprite.alpha = 0.3;
         
-        let move = SKAction.moveToY(victim.sprite.position.y + 10, duration: 1.0);
+        let tint_color: UIColor;
+        if victim {
+            tint_color = UIColor.redColor();
+        }
+        else {
+            tint_color = UIColor.greenColor();
+        }
+        let tint = SKAction.colorizeWithColor(tint_color, colorBlendFactor: 1.0, duration: attack_effect_duration);
+        let tint_clr = SKAction.colorizeWithColor(UIColor.clearColor(), colorBlendFactor: 1.0, duration: attack_effect_duration);
+        
+        addChild(sprite);
+        sprite.runAction(SKAction.sequence([
+            tint, tint_clr,
+            tint, tint_clr,
+            tint, tint_clr
+            ]), completion: {
+                sprite.removeFromParent();
+        });
+    }
+    func victimDamage(victim: Symbol) -> Void {
+        
         let flashing = SKAction.sequence([
-            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-            SKAction.fadeAlphaTo(0.1, duration: 0.05), SKAction.fadeAlphaTo(1.0, duration: 0.05),
-        ]);
-        damage_label.runAction(SKAction.sequence([move, flashing]), completion: {
-            damage_label.removeFromParent();
+            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+            ]);
+        
+        victim.sprite.runAction(SKAction.sequence([flashing]), completion: {
+            let damage_label = SKLabelNode(text: "-1");
+            damage_label.fontSize = 14.0;
+            damage_label.fontColor = UIColor.redColor();
+            damage_label.position = victim.sprite.position;
+            self.addChild(damage_label);
             
-            // 実際のダメージ
-            victim.param.hp -= 1;
+            let move = SKAction.moveToY(victim.sprite.position.y + 10, duration: 1.0);
+            damage_label.runAction(SKAction.sequence([move, flashing]), completion: {
+                damage_label.removeFromParent();
+                
+                // 実際のダメージ
+                victim.param.hp -= 1;
+            });
         });
     }
     func dieSymbol() {
@@ -651,14 +709,14 @@ class GameScene: SKScene {
         
         var winner: (player: Bool, enemy:Bool) = (false, false);
         
-        for i in 0 ..< (columns*2) {
+        for i in 0 ..< columns {
             if fields[i].symbol != nil && fields[i].symbol!.enemy {
                 player_hp -= fields[i].symbol!.param.atk;
                 print("player lastHP:\(player_hp)");
             }
         }
         
-        for i in fields.count - (columns*2) ..< fields.count {
+        for i in fields.count - columns ..< fields.count {
             if fields[i].symbol != nil && fields[i].symbol!.player {
                 enemy_hp -= fields[i].symbol!.param.atk;
                 print("enemy lastHP:\(enemy_hp)");
