@@ -3,18 +3,9 @@ import SpriteKit
 class GameScene: SKScene {
     
     // 5*8の盤面
-    var columns: Int = 5;
+    var columns: Int = 6;
     var rows: Int = 8;
-    var fields: [Field] = [
-        Field(r:0, c:0), Field(r:0, c:1), Field(r:0, c:2), Field(r:0, c:3), Field(r:0, c:4),
-        Field(r:1, c:0), Field(r:1, c:1), Field(r:1, c:2), Field(r:1, c:3), Field(r:1, c:4),
-        Field(r:2, c:0), Field(r:2, c:1), Field(r:2, c:2), Field(r:2, c:3), Field(r:2, c:4),
-        Field(r:3, c:0), Field(r:3, c:1), Field(r:3, c:2), Field(r:3, c:3), Field(r:3, c:4),
-        Field(r:4, c:0), Field(r:4, c:1), Field(r:4, c:2), Field(r:4, c:3), Field(r:4, c:4),
-        Field(r:5, c:0), Field(r:5, c:1), Field(r:5, c:2), Field(r:5, c:3), Field(r:5, c:4),
-        Field(r:6, c:0), Field(r:6, c:1), Field(r:6, c:2), Field(r:6, c:3), Field(r:6, c:4),
-        Field(r:7, c:0), Field(r:7, c:1), Field(r:7, c:2), Field(r:7, c:3), Field(r:7, c:4),
-    ];
+    var fields: [Field] = [];
     func getFieldsIndex(rc: (r:Int, c:Int)) -> Int {
         return (rc.r * columns) + rc.c;
     }
@@ -100,33 +91,32 @@ class GameScene: SKScene {
     }
     
     func settingFields() {
-        fields[0].setPlayerField(0);
-        fields[1].setPlayerField(1);
-        fields[2].setPlayerField(2);
-        fields[3].setPlayerField(3);
-        fields[4].setPlayerField(4);
-        fields[(columns * rows) - 5].setEnemyField();
-        fields[(columns * rows) - 4].setEnemyField();
-        fields[(columns * rows) - 3].setEnemyField();
-        fields[(columns * rows) - 2].setEnemyField();
-        fields[(columns * rows) - 1].setEnemyField();
         
-        for i in 0 ..< fields.count {
-            let field = fields[i];
+        let field_count = columns * rows;
+        for i in 0 ..< field_count {
+            
+            let field = Field(r:i/columns, c:i%columns);
             
             self.addChild(field.sprite);
             
             let s: CGFloat = Field.size;
-            let base_x = self.view!.center.x - (s*CGFloat(columns/2));
+            let base_x = self.view!.center.x - (s*CGFloat(columns/2)) + (columns % 2 == 0 ? s/2 : 0);
             let base_y = self.view!.center.y - (s*CGFloat(rows/2)) + (s/2);
             field.sprite.position = CGPoint(x: base_x+(s*CGFloat(field.column)), y: base_y+(s*CGFloat(field.row)));
             
-            if field.row % 2 == 0 && field.player_field == false {
+            if field.row % 2 == 1 && field.player_field == false {
                 field.sprite.color = UIColor(red: 0.9, green: 1.0, blue: 0.9, alpha: 1.0);
             }
             else if field.player_field == false && field.enemy_field == false {
                 field.sprite.color = UIColor(red: 1.0, green: 0.9, blue: 0.9, alpha: 1.0);
             }
+            
+            fields.append(field);
+        }
+        
+        for i in 0 ..< columns {
+            fields[i].setPlayerField(i);
+            fields[(columns * rows) - (i+1)].setEnemyField();
         }
     }
     
@@ -134,7 +124,7 @@ class GameScene: SKScene {
         
         let s: CGFloat = Field.size;
         let base_x = self.view!.center.x - (s*CGFloat(player_fields.count/2)) + (s/2);
-        let base_y = self.view!.center.y - (s*CGFloat(rows/2)) - (s/2);
+        let base_y = self.view!.center.y - (s*CGFloat(rows/2)) - s;
         
         for i in 0 ..< player_fields.count {
             let field = player_fields[i];
@@ -149,7 +139,7 @@ class GameScene: SKScene {
         
         let s: CGFloat = Field.size;
         let base_x = self.view!.center.x - (s*CGFloat(enemy_fields.count/2)) + (s/2);
-        let base_y = self.view!.center.y + (s*CGFloat(rows/2)) + (s/2);
+        let base_y = self.view!.center.y + (s*CGFloat(rows/2)) + (rows % 2 == 0 ? s : (s*2));
         
         for i in 0 ..< enemy_fields.count {
             let field = enemy_fields[i];
@@ -319,6 +309,10 @@ class GameScene: SKScene {
                             for i in 0 ..< columns {
                                 if fname == "player_field\(i)" {
                                     
+                                    if fields[i].symbol != nil {
+                                        break;
+                                    }
+                                    
                                     fields[i].symbol = node.symbol;
                                     node.symbol.sprite.position = field.position;
                                     node.symbol.deploy_turn = turn;
@@ -445,48 +439,53 @@ class GameScene: SKScene {
     
     struct MOVE_SYMBOL_LOG {
         var symbol: Symbol;
-        var fromRow: Int;
-        var toRow: Int;
+        var beforRC: (r:Int, c:Int);
+        var nextRC: (r:Int, c:Int);
     }
     var move_log: [MOVE_SYMBOL_LOG] = [];
     var move_finish: Int = 0;
-    var move_total: Int = 0;
     func updateMoveSymbol_Start() {
         move_log = [];
         move_finish = 0;
-        move_total = 0;
-        for t in field_symbols.keys {
+        let keys = field_symbols.keys;
+        for t in (keys.sort {$0 < $1}) {
             var i = 0;
             for op in field_symbols[t]!.keys {
+                
                 let deploy_symbol = field_symbols[t]![op]!;
-                let beforRow: Int = deploy_symbol.symbol.rc.r;
-                var nextRow: Int;
+                
+                var moveRow: Int = 2;
+                if  deploy_symbol.symbol.rc.r == 0 ||
+                    deploy_symbol.symbol.rc.r == rows-1 {
+                    moveRow = 1;
+                }
+                
+                let beforRC: (r:Int, c:Int) = (deploy_symbol.symbol.rc.r, deploy_symbol.symbol.rc.c);
+                var nextRC: (r:Int, c:Int);
                 if deploy_symbol.player && deploy_symbol.enemy == false {
-                    nextRow = deploy_symbol.symbol.rc.r+2;
-                    if nextRow >= rows {
-                        nextRow = rows-1;
+                    nextRC = (beforRC.r+moveRow, beforRC.c);
+                    if nextRC.r >= rows {
+                        nextRC.r = rows-1;
                     }
                 }
                 else if deploy_symbol.enemy && deploy_symbol.player == false {
-                    nextRow = deploy_symbol.symbol.rc.r-2;
-                    if nextRow < 0 {
-                        nextRow = 0;
+                    nextRC = (beforRC.r-moveRow, beforRC.c);
+                    if nextRC.r < 0 {
+                        nextRC.r = 0;
                     }
                 }
                 else { continue; } // 移動しない
                 
-                move_total += 1;
-                
-                move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol.symbol, fromRow:beforRow, toRow: nextRow));
-                deploy_symbol.symbol.rc = (r:nextRow, c:deploy_symbol.symbol.rc.c);
-                
-                fields[getFieldsIndex((r:nextRow, c:deploy_symbol.symbol.rc.c))].symbol = deploy_symbol.symbol;
-                fields[getFieldsIndex((r:beforRow, c:deploy_symbol.symbol.rc.c))].symbol = nil;
+                move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol.symbol, beforRC:beforRC, nextRC: nextRC));
+
+                deploy_symbol.symbol.rc = nextRC;
+                fields[getFieldsIndex(nextRC)].symbol = deploy_symbol.symbol;
+                fields[getFieldsIndex(beforRC)].symbol = nil;
                 
                 let wait = SKAction.waitForDuration(0.4*NSTimeInterval(t)+0.2*NSTimeInterval(i));
-                let moveto = SKAction.moveTo(getFieldsPosition((r:nextRow, c:deploy_symbol.symbol.rc.c)), duration: 0.4);
+                let moveto = SKAction.moveTo(getFieldsPosition(nextRC), duration: 0.4);
                 let endf = SKAction.runBlock({ 
-                    print("move end \(nextRow),\(deploy_symbol.symbol.rc.c)");
+                    print("move end \(nextRC)");
                 })
                 deploy_symbol.symbol.sprite.runAction(SKAction.sequence([wait, moveto, endf]), completion: {
                     self.move_finish += 1;
@@ -500,7 +499,19 @@ class GameScene: SKScene {
     }
     func updateMoveSymbol() {
         // 先に配置した図形(field_symbolsの順)に移動を処理する
-        if move_finish >= move_total {
+        if move_finish >= move_log.count {
+            print(" --- move log ---");
+            var findex_list: [Int] = [];
+            for log in move_log {
+                print("beforRC:\(log.beforRC) nextRC:\(log.nextRC) symbol:\(log.symbol)");
+                findex_list.append(getFieldsIndex(log.nextRC));
+            }
+            print(" --- move result check ---");
+            for i in findex_list {
+                if fields[i].symbol == nil {
+                    print("move error rc:\(fields[i].row),\(fields[i].column)");
+                }
+            }
             print(" --- attack start ---");
             updateAttackSymbol_Start();
         }
@@ -508,7 +519,7 @@ class GameScene: SKScene {
     
     struct ATTACK_LOG {
         var attacker_symbol: Symbol;
-        var victim_symbol: Symbol;
+        var victim_symbols: [Symbol];
     }
     var attack_logs: [Int: ATTACK_LOG] = [:];
     var attack_finish: Int = 0;
@@ -522,30 +533,44 @@ class GameScene: SKScene {
         attack_finish = 0;
         attack_logs = [:];
         var attack_index = 0;
-        for t in field_symbols.keys {
+        let keys = field_symbols.keys;
+        for t in (keys.sort {$0 < $1}) {
             for op in field_symbols[t]!.keys {
+                
                 let attacker_symbol = field_symbols[t]![op]!;
-                for tkey in target_pos_list.keys {
-                    if let is_attack = attacker_symbol.symbol.attack_target[tkey] {
-                        if is_attack == false {
-                            print("continue out of target");
-                            continue;
-                        }
-                    }
+                print("attacker:\(attacker_symbol)");
+                
+                // 相手陣地に攻め込んだものは攻撃しない
+                if  (attacker_symbol.player && attacker_symbol.symbol.rc.r == rows-1) ||
+                    (attacker_symbol.enemy && attacker_symbol.symbol.rc.r == 0)
+                {
+                    print("continue player attack");
+                    continue;
+                }
+                
+                var victims: [Symbol] = [];
+                var targets: [(r:Int, c:Int)] = [];
+                for tkey in attacker_symbol.symbol.attack_target_list {
+                    
                     let target = target_pos_list[tkey]!;
                     let target_pos: (r:Int, c:Int);
                     if attacker_symbol.player {
                         target_pos = (attacker_symbol.symbol.rc.r + target.r, attacker_symbol.symbol.rc.c + target.c);
                     }
-                    else {
+                    else if attacker_symbol.enemy {
                         target_pos = (attacker_symbol.symbol.rc.r + (target.r*(-1)), attacker_symbol.symbol.rc.c + (target.c*(-1)));
                     }
+                    else { print("\(#function) symbol error player:\(attacker_symbol.player) or enemy:\(attacker_symbol.enemy) ?"); continue; } // バグってる。処理しない。
                     print("\(#function) target_pos:\(target_pos)");
-                    // 範囲外と図形なしをチェック
-                    if (target_pos.r < 0 || target_pos.r >= rows) || (target_pos.c < 0 || target_pos.c >= columns) {
+                    
+                    // 範囲外をチェック
+                    if  (target_pos.r < 0 || target_pos.r >= rows) || (target_pos.c < 0 || target_pos.c >= columns) {
                         print("continue out of range");
                         continue;
                     }
+                    targets.append(target_pos);
+                    
+                    // 図形なしをチェック
                     if fields[getFieldsIndex(target_pos)].symbol == nil {
                         print("continue no symbol");
                         continue;
@@ -563,78 +588,89 @@ class GameScene: SKScene {
                     }
                     else { print("\(#function) symbol error attacker:\(attacker_symbol.symbol.rc) or victim:\(victim.rc) ?"); continue; } // バグってる。処理しない。
                     
-                
                     if is_attack_ok {
-
-                        attack_logs[attack_logs.count] = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, victim_symbol: victim);
-                        
-                        //アニメーション開始しちゃう
-                        var sequence: [SKAction] = [];
-                        sequence.append(SKAction.waitForDuration(4.0 * NSTimeInterval(attack_index)));
-                        sequence.append(SKAction.sequence([
-                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
-                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
-                            SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
-                            ])
-                        );
-                        sequence.append(SKAction.waitForDuration(0.5));
-                        sequence.append(SKAction.runBlock({
-                            self.attackFieldFlashing(victim, victim: true);
-                        }));
-                        sequence.append(SKAction.waitForDuration(0.8));
-                        sequence.append(SKAction.runBlock({
-                            self.victimDamage(victim);
-                        }, queue: dispatch_get_main_queue()));
-                        // カウンターありの場合
-                        if victim.counter {
-                            sequence.append(SKAction.waitForDuration(0.3));
-                            sequence.append(SKAction.runBlock({
-                                self.victimDamage(attacker_symbol.symbol);
-                                }, queue: dispatch_get_main_queue())
-                            );
-                        }
-                        sequence.append(SKAction.waitForDuration(1.5));
-                        attacker_symbol.symbol.sprite.runAction(
-                            SKAction.sequence(sequence),
-                            completion: {
-                                self.attack_finish += 1;
-                            }
-                        );
-                        
-                        attack_index += 1;
+                        victims.append(victim);
                     }
                 }
+                
+                if victims.count <= 0 {
+                    continue;
+                }
+                
+                let attack_log = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, victim_symbols: victims);
+                attack_logs[attack_logs.count] = attack_log;
+                
+                //アニメーション開始しちゃう
+                var sequence: [SKAction] = [];
+                sequence.append(SKAction.waitForDuration(3.5 * NSTimeInterval(attack_index)));
+                sequence.append(SKAction.sequence([
+                    SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                    SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                    SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                    SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
+                    ])
+                );
+                sequence.append(SKAction.runBlock({
+                    self.attackFieldFlashing(targets);
+                }));
+                sequence.append(SKAction.waitForDuration(0.5));
+                sequence.append(SKAction.runBlock({
+                        for victim in attack_log.victim_symbols {
+                            self.victimDamage(victim);
+                        }
+                    }, queue: dispatch_get_main_queue()));
+                // カウンターありの場合
+                var counter_count = 0;
+                for victim in attack_log.victim_symbols {
+                    if victim.counter {
+                        counter_count += 1;
+                    }
+                }
+                if counter_count > 0 {
+                    sequence.append(SKAction.waitForDuration(0.3));
+                    sequence.append(SKAction.runBlock({
+                        self.victimDamage(attacker_symbol.symbol, count: counter_count);
+                        }, queue: dispatch_get_main_queue())
+                    );
+                }
+                sequence.append(SKAction.waitForDuration(1.5));
+                attacker_symbol.symbol.sprite.runAction(
+                    SKAction.sequence(sequence),
+                    completion: {
+                        self.attack_finish += 1;
+                    }
+                );
+
+                attack_index += 1;
             }
         }
 
         chgSceneSts(.attack_symbol);
     }
-    func attackFieldFlashing(symbol: Symbol, victim: Bool) {
+    func attackFieldFlashing(targets: [(r:Int, c:Int)]) {
         // 攻撃側と被害側の背景を点滅させる
-        let sprite = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: Symbol.size, height: Symbol.size));
-        sprite.position = symbol.sprite.position;
-        sprite.alpha = 0.3;
-        
-        let tint_color: UIColor;
-        if victim {
-            tint_color = UIColor.redColor();
-        }
-        else {
-            tint_color = UIColor.greenColor();
-        }
-        let tint = SKAction.colorizeWithColor(tint_color, colorBlendFactor: 1.0, duration: attack_effect_duration);
+        let tint = SKAction.colorizeWithColor(UIColor.redColor(), colorBlendFactor: 1.0, duration: attack_effect_duration);
         let tint_clr = SKAction.colorizeWithColor(UIColor.clearColor(), colorBlendFactor: 1.0, duration: attack_effect_duration);
-        
-        addChild(sprite);
-        sprite.runAction(SKAction.sequence([
+        let sequence = SKAction.sequence([
             tint, tint_clr,
             tint, tint_clr,
             tint, tint_clr
-            ]), completion: {
-                sprite.removeFromParent();
-        });
+            ]);
+        
+        for target in targets {
+            let sprite = SKSpriteNode(color: UIColor.clearColor(), size: CGSize(width: Symbol.size, height: Symbol.size));
+            sprite.position = fields[getFieldsIndex(target)].sprite.position;
+            sprite.alpha = 0.3;
+            addChild(sprite);
+            sprite.runAction(
+                sequence,
+                completion: {
+                    sprite.removeFromParent();
+                }
+            );
+        }
     }
-    func victimDamage(victim: Symbol) -> Void {
+    func victimDamage(victim: Symbol, count: Int = 1) -> Void {
         
         let flashing = SKAction.sequence([
             SKAction.fadeAlphaTo(0.1, duration: attack_effect_duration), SKAction.fadeAlphaTo(1.0, duration: attack_effect_duration),
@@ -643,19 +679,23 @@ class GameScene: SKScene {
             ]);
         
         victim.sprite.runAction(SKAction.sequence([flashing]), completion: {
-            let damage_label = SKLabelNode(text: "-1");
-            damage_label.fontSize = 14.0;
-            damage_label.fontColor = UIColor.redColor();
-            damage_label.position = victim.sprite.position;
-            self.addChild(damage_label);
             
-            let move = SKAction.moveToY(victim.sprite.position.y + 10, duration: 1.0);
-            damage_label.runAction(SKAction.sequence([move, flashing]), completion: {
-                damage_label.removeFromParent();
+            for i in 0 ..< count {
+                let damage_label = SKLabelNode(text: "-1");
+                damage_label.fontSize = 14.0;
+                damage_label.fontColor = UIColor.redColor();
+                damage_label.position = victim.sprite.position;
+                self.addChild(damage_label);
                 
-                // 実際のダメージ
-                victim.param.hp -= 1;
-            });
+                let wait = SKAction.waitForDuration(0.5 * NSTimeInterval(i));
+                let move = SKAction.moveToY(victim.sprite.position.y + 10, duration: 1.0);
+                damage_label.runAction(SKAction.sequence([wait, move, flashing]), completion: {
+                    damage_label.removeFromParent();
+                    
+                    // 実際のダメージ
+                    victim.param.hp -= 1;
+                });
+            }
         });
     }
     func dieSymbol() {
@@ -714,17 +754,32 @@ class GameScene: SKScene {
         
         var winner: (player: Bool, enemy:Bool) = (false, false);
         
-        for i in 0 ..< columns {
-            if fields[i].symbol != nil && fields[i].symbol!.enemy {
-                player_hp -= fields[i].symbol!.param.atk;
-                print("player lastHP:\(player_hp)");
-            }
-        }
-        
-        for i in fields.count - columns ..< fields.count {
-            if fields[i].symbol != nil && fields[i].symbol!.player {
-                enemy_hp -= fields[i].symbol!.param.atk;
-                print("enemy lastHP:\(enemy_hp)");
+        for t in field_symbols.keys {
+            let symbols = field_symbols[t]!;
+            for i in symbols.keys {
+                let symbol = symbols[i]!;
+                var remove = false;
+                if symbol.player && symbol.symbol.rc.r == rows-1 {
+                    // TODO:相手ダメージ演出
+                    enemy_hp -= symbol.symbol.param.atk;
+                    print("enemy lastHP:\(enemy_hp)");
+                    remove = true;
+                }
+                else if symbol.enemy && symbol.symbol.rc.r == 0 {
+                    // TODO:自分ダメージ演出
+                    player_hp -= symbol.symbol.param.atk;
+                    print("player lastHP:\(player_hp)");
+                    remove = true;
+                }
+                
+                if remove {
+                    fields[getFieldsIndex(symbol.symbol.rc)].symbol = nil;
+                    field_symbols[symbol.symbol.deploy_turn]!.removeValueForKey(symbol.symbol.deploy_index);
+                    if field_symbols[symbol.symbol.deploy_turn]!.count == 0 {
+                        field_symbols.removeValueForKey(symbol.symbol.deploy_turn);
+                    }
+                    symbol.symbol.sprite.removeFromParent();
+                }
             }
         }
         

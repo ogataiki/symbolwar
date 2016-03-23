@@ -28,6 +28,7 @@ class Symbol {
         "fl" : false, "ff" : false, "fr" : false,
         "bl" : false, "bb" : false, "br" : false
     ];
+    var attack_target_list: [String] = [];
     
     var counter = false;
     
