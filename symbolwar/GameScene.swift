@@ -3,8 +3,8 @@ import SpriteKit
 class GameScene: SKScene {
     
     // 5*8の盤面
-    var columns: Int = 6;
-    var rows: Int = 8;
+    var columns: Int = 3;
+    var rows: Int = 6;
     var fields: [Field] = [];
     func getFieldsIndex(rc: (r:Int, c:Int)) -> Int {
         return (rc.r * columns) + rc.c;
@@ -64,14 +64,10 @@ class GameScene: SKScene {
     
     var turn: Int = 0;
     
-    struct DEPLOY_SYMBOL {
-        var player: Bool;
-        var enemy: Bool;
-        var symbol: Symbol;
-    }
-    var this_turn_deploy_symbols: [Int: DEPLOY_SYMBOL] = [:];
-    var field_symbols: [Int: [Int: DEPLOY_SYMBOL]] = [:];
+    var this_turn_deploy_symbols: [Int : Int] = [:];
+    var field_symbols: [Int: [Int : Int]] = [:];
     
+    var symbol_mgr = SymbolMgr.sharedInstance;
     
     override func didMoveToView(view: SKView) {
         /* Setup your scene here */
@@ -162,6 +158,7 @@ class GameScene: SKScene {
         player_deck[3] = Circle();
         for i in 0 ..< player_deck.count {
             player_deck[i]!.setPlayerMode();
+            symbol_mgr.entrySymbol(player_deck[i]!);
         }
 
         enemy_deck[0] = Triangle();
@@ -170,6 +167,7 @@ class GameScene: SKScene {
         enemy_deck[3] = Circle();
         for i in 0 ..< enemy_deck.count {
             enemy_deck[i]!.setEnemyMode();
+            symbol_mgr.entrySymbol(enemy_deck[i]!);
         }
         
         updateDeck();
@@ -180,10 +178,12 @@ class GameScene: SKScene {
             if player_deck[i] == nil {
                 player_deck[i] = lotterySymbol();
                 player_deck[i]!.setPlayerMode();
+                symbol_mgr.entrySymbol(player_deck[i]!);
             }
             if enemy_deck[i] == nil {
                 enemy_deck[i] = lotterySymbol();
                 enemy_deck[i]!.setEnemyMode();
+                symbol_mgr.entrySymbol(enemy_deck[i]!);
             }
         }
         
@@ -224,16 +224,16 @@ class GameScene: SKScene {
         // デッキ内容を手札フィールドに反映
         for i in 0 ..< deck_count {
             if let symbol = player_deck[i] {
-                if player_fields[i].symbol == nil {
-                    player_fields[i].symbol = symbol;
+                if player_fields[i].symbols.count == 0 {
+                    player_fields[i].deploySymbol(symbol.unique);
                     self.addChild(symbol.sprite);
                     symbol.sprite.name = "\(i)";
                     symbol.sprite.position = player_fields[i].sprite.position;
                 }
             }
             if let symbol = enemy_deck[i] {
-                if enemy_fields[i].symbol == nil {
-                    enemy_fields[i].symbol = symbol;
+                if enemy_fields[i].symbols.count == 0 {
+                    enemy_fields[i].deploySymbol(symbol.unique);
                     self.addChild(symbol.sprite);
                     symbol.sprite.position = enemy_fields[i].sprite.position;
                 }
@@ -311,20 +311,20 @@ class GameScene: SKScene {
                             for i in 0 ..< columns {
                                 if fname == "player_field\(i)" {
                                     
-                                    if fields[i].symbol != nil {
+                                    if fields[i].symbols.count > 0 {
                                         break;
                                     }
                                     
-                                    fields[i].symbol = node.symbol;
+                                    fields[i].deploySymbol(node.symbol.unique);
                                     node.symbol.sprite.position = field.position;
                                     node.symbol.deploy_turn = turn;
                                     node.symbol.deploy_index = operation_count;
                                     node.symbol.rc = (r:0, c:i);
                                     
-                                    this_turn_deploy_symbols[operation_count] = DEPLOY_SYMBOL(player: true, enemy: false, symbol: node.symbol);
+                                    this_turn_deploy_symbols[operation_count] = node.symbol.unique;
                                     
                                     player_deck[node.pdeck_index] = nil;
-                                    player_fields[node.pdeck_index].symbol = nil;
+                                    player_fields[node.pdeck_index].symbols = [];
                                     
                                     operation_count += 1;
                                     moved = true;
@@ -403,24 +403,33 @@ class GameScene: SKScene {
     func updateEnemyOperation() {
         
         // TODO:AIを後で用意
-        var field_buf: [Int] = [0, 1, 2, 3, 4];
-        var deck_buf: [Int] = [0, 1, 2, 3];
+        var field_buf: [Int] = [];
+        for i in 0 ..< columns {
+            field_buf.append(i);
+        }
+        var deck_buf: [Int] = [];
+        for i in 0 ..< enemy_deck.count {
+            if enemy_deck[i] != nil {
+                deck_buf.append(i);
+            }
+        }
         
         for _ in 0 ..< operation_max {
             let findex = Int(arc4random_uniform(UInt32(field_buf.count)));
             let dindex = Int(arc4random_uniform(UInt32(deck_buf.count)));
             
             let target_field = fields[(columns * rows) - field_buf[findex] - 1];
-            target_field.symbol = enemy_deck[deck_buf[dindex]]!;
-            target_field.symbol!.sprite.position = target_field.sprite.position;
-            target_field.symbol!.deploy_turn = turn;
-            target_field.symbol!.deploy_index = operation_count;
-            target_field.symbol!.rc = (r:target_field.row, c:target_field.column);
+            let symbol = enemy_deck[deck_buf[dindex]]!;
+            target_field.symbols.append(symbol.unique);
+            symbol.sprite.position = target_field.sprite.position;
+            symbol.deploy_turn = turn;
+            symbol.deploy_index = operation_count;
+            symbol.rc = (r:target_field.row, c:target_field.column);
             
-            this_turn_deploy_symbols[operation_count] = DEPLOY_SYMBOL(player: false, enemy: true, symbol: target_field.symbol!);
+            this_turn_deploy_symbols[operation_count] = symbol.unique;
             
             enemy_deck[deck_buf[dindex]] = nil;
-            enemy_fields[deck_buf[dindex]].symbol = nil;
+            enemy_fields[deck_buf[dindex]].symbols = [];
             
             field_buf.removeAtIndex(findex);
             deck_buf.removeAtIndex(dindex);
@@ -454,15 +463,15 @@ class GameScene: SKScene {
             var i = 0;
             for op in field_symbols[t]!.keys {
                 
-                let deploy_symbol = field_symbols[t]![op]!;
-                
-                var moveRow: Int = 2;
-                if  deploy_symbol.symbol.rc.r == 0 ||
-                    deploy_symbol.symbol.rc.r == rows-1 {
-                    moveRow = 1;
+                let get_symbol = symbol_mgr.getSymbol(field_symbols[t]![op]!);
+                if get_symbol.result == false {
+                    continue;
                 }
+                let deploy_symbol = get_symbol.symbol!;
                 
-                let beforRC: (r:Int, c:Int) = (deploy_symbol.symbol.rc.r, deploy_symbol.symbol.rc.c);
+                let moveRow: Int = 1;
+                
+                let beforRC: (r:Int, c:Int) = (deploy_symbol.rc.r, deploy_symbol.rc.c);
                 var nextRC: (r:Int, c:Int);
                 if deploy_symbol.player && deploy_symbol.enemy == false {
                     nextRC = (beforRC.r+moveRow, beforRC.c);
@@ -478,18 +487,18 @@ class GameScene: SKScene {
                 }
                 else { continue; } // 移動しない
                 
-                move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol.symbol, beforRC:beforRC, nextRC: nextRC));
+                move_log.append(MOVE_SYMBOL_LOG(symbol: deploy_symbol, beforRC:beforRC, nextRC: nextRC));
 
-                deploy_symbol.symbol.rc = nextRC;
-                fields[getFieldsIndex(nextRC)].symbol = deploy_symbol.symbol;
-                fields[getFieldsIndex(beforRC)].symbol = nil;
+                deploy_symbol.rc = nextRC;
+                fields[getFieldsIndex(nextRC)].deploySymbol(deploy_symbol.unique);
+                fields[getFieldsIndex(beforRC)].removeSymbol(deploy_symbol.unique);
                 
                 let wait = SKAction.waitForDuration(0.4*NSTimeInterval(t)+0.2*NSTimeInterval(i));
                 let moveto = SKAction.moveTo(getFieldsPosition(nextRC), duration: 0.4);
                 let endf = SKAction.runBlock({ 
                     print("move end \(nextRC)");
                 })
-                deploy_symbol.symbol.sprite.runAction(SKAction.sequence([wait, moveto, endf]), completion: {
+                deploy_symbol.sprite.runAction(SKAction.sequence([wait, moveto, endf]), completion: {
                     self.move_finish += 1;
                     print("move_finish");
                 });
@@ -502,18 +511,6 @@ class GameScene: SKScene {
     func updateMoveSymbol() {
         // 先に配置した図形(field_symbolsの順)に移動を処理する
         if move_finish >= move_log.count {
-            print(" --- move log ---");
-            var findex_list: [Int] = [];
-            for log in move_log {
-                print("beforRC:\(log.beforRC) nextRC:\(log.nextRC) symbol:\(log.symbol)");
-                findex_list.append(getFieldsIndex(log.nextRC));
-            }
-            print(" --- move result check ---");
-            for i in findex_list {
-                if fields[i].symbol == nil {
-                    print("move error rc:\(fields[i].row),\(fields[i].column)");
-                }
-            }
             print(" --- attack start ---");
             updateAttackSymbol_Start();
         }
@@ -531,6 +528,7 @@ class GameScene: SKScene {
         // アタックログの生成とアニメーション開始
         let target_pos_list: [String: (r:Int, c:Int)] = [
             "fl" : (r:1, c:-1), "ff" : (r:1, c:0), "fr" : (r:1, c:1),
+            "ml" : (r:0, c:-1), "mr" : (r:0, c:1),
             "bl" : (r:-1, c:-1), "bb" : (r:-1, c:0), "br" : (r:-1, c:1)
         ];
         attack_finish = 0;
@@ -540,12 +538,16 @@ class GameScene: SKScene {
         for t in (keys.sort {$0 < $1}) {
             for op in field_symbols[t]!.keys {
                 
-                let attacker_symbol = field_symbols[t]![op]!;
+                let get_symbol = symbol_mgr.getSymbol(field_symbols[t]![op]!);
+                if get_symbol.result == false {
+                    continue;
+                }
+                let attacker_symbol = get_symbol.symbol!;
                 print("attacker:\(attacker_symbol)");
                 
                 // 相手陣地に攻め込んだものは攻撃しない
-                if  (attacker_symbol.player && attacker_symbol.symbol.rc.r == rows-1) ||
-                    (attacker_symbol.enemy && attacker_symbol.symbol.rc.r == 0)
+                if  (attacker_symbol.player && attacker_symbol.rc.r == rows-1) ||
+                    (attacker_symbol.enemy && attacker_symbol.rc.r == 0)
                 {
                     print("continue player attack");
                     continue;
@@ -553,15 +555,15 @@ class GameScene: SKScene {
                 
                 var victims: [Symbol] = [];
                 var targets: [(r:Int, c:Int)] = [];
-                for tkey in attacker_symbol.symbol.attack_target_list {
+                for tkey in attacker_symbol.attack_target_list {
                     
                     let target = target_pos_list[tkey]!;
                     let target_pos: (r:Int, c:Int);
                     if attacker_symbol.player {
-                        target_pos = (attacker_symbol.symbol.rc.r + target.r, attacker_symbol.symbol.rc.c + target.c);
+                        target_pos = (attacker_symbol.rc.r + target.r, attacker_symbol.rc.c + target.c);
                     }
                     else if attacker_symbol.enemy {
-                        target_pos = (attacker_symbol.symbol.rc.r + (target.r*(-1)), attacker_symbol.symbol.rc.c + (target.c*(-1)));
+                        target_pos = (attacker_symbol.rc.r + (target.r*(-1)), attacker_symbol.rc.c + (target.c*(-1)));
                     }
                     else { print("\(#function) symbol error player:\(attacker_symbol.player) or enemy:\(attacker_symbol.enemy) ?"); continue; } // バグってる。処理しない。
                     print("\(#function) target_pos:\(target_pos)");
@@ -574,25 +576,32 @@ class GameScene: SKScene {
                     targets.append(target_pos);
                     
                     // 図形なしをチェック
-                    if fields[getFieldsIndex(target_pos)].symbol == nil {
+                    if fields[getFieldsIndex(target_pos)].symbols.count <= 0 {
                         print("continue no symbol");
                         continue;
                     }
-                    print("hit!");
-                    let victim = fields[getFieldsIndex(target_pos)].symbol!;
                     
-                    // 自軍攻撃をしないようチェック
-                    var is_attack_ok = false;
-                    if attacker_symbol.player && attacker_symbol.enemy == false && victim.player == false && victim.enemy {
-                        is_attack_ok = true;
-                    }
-                    else if attacker_symbol.enemy && attacker_symbol.player == false && victim.enemy == false && victim.player {
-                        is_attack_ok = true;
-                    }
-                    else { print("\(#function) symbol error attacker:\(attacker_symbol.symbol.rc) or victim:\(victim.rc) ?"); continue; } // バグってる。処理しない。
-                    
-                    if is_attack_ok {
-                        victims.append(victim);
+                    for u in fields[getFieldsIndex(target_pos)].symbols {
+                        let get_symbol = symbol_mgr.getSymbol(u);
+                        if get_symbol.result == false {
+                            continue;
+                        }
+                        let victim = get_symbol.symbol!;
+                        
+                        // 自軍攻撃をしないようチェック
+                        var is_attack_ok = false;
+                        if attacker_symbol.player && attacker_symbol.enemy == false && victim.player == false && victim.enemy {
+                            is_attack_ok = true;
+                        }
+                        else if attacker_symbol.enemy && attacker_symbol.player == false && victim.enemy == false && victim.player {
+                            is_attack_ok = true;
+                        }
+                        else { print("\(#function) symbol error attacker:\(attacker_symbol.rc) or victim:\(victim.rc) ?"); continue; } // バグってる。処理しない。
+                        
+                        if is_attack_ok {
+                            print("hit!");
+                            victims.append(victim);
+                        }
                     }
                 }
                 
@@ -600,7 +609,7 @@ class GameScene: SKScene {
                     continue;
                 }
                 
-                let attack_log = ATTACK_LOG(attacker_symbol: attacker_symbol.symbol, damage:attacker_symbol.symbol.param.atk, victim_symbols: victims);
+                let attack_log = ATTACK_LOG(attacker_symbol: attacker_symbol, damage:attacker_symbol.param.atk, victim_symbols: victims);
                 attack_logs[attack_logs.count] = attack_log;
                 
                 //アニメーション開始しちゃう
@@ -632,12 +641,12 @@ class GameScene: SKScene {
                 if counter_count > 0 {
                     sequence.append(SKAction.waitForDuration(0.3));
                     sequence.append(SKAction.runBlock({
-                        self.victimDamage(attacker_symbol.symbol, damage:attack_log.damage, count: counter_count);
+                        self.victimDamage(attacker_symbol, damage:attack_log.damage, count: counter_count);
                         }, queue: dispatch_get_main_queue())
                     );
                 }
                 sequence.append(SKAction.waitForDuration(1.5));
-                attacker_symbol.symbol.sprite.runAction(
+                attacker_symbol.sprite.runAction(
                     SKAction.sequence(sequence),
                     completion: {
                         self.attack_finish += 1;
@@ -709,16 +718,22 @@ class GameScene: SKScene {
     }
     func dieSymbol() {
         for t in field_symbols.keys {
-            for i in field_symbols[t]!.keys {
-                let symbol = field_symbols[t]![i]!.symbol;
+            for op in field_symbols[t]!.keys {
+                
+                let get_symbol = symbol_mgr.getSymbol(field_symbols[t]![op]!);
+                if get_symbol.result == false {
+                    continue;
+                }
+                let symbol = get_symbol.symbol!;
                 if symbol.param.hp <= 0 {
                     // 消失
-                    fields[getFieldsIndex(symbol.rc)].symbol = nil;
+                    fields[getFieldsIndex(symbol.rc)].removeSymbol(symbol.unique);
                     field_symbols[symbol.deploy_turn]!.removeValueForKey(symbol.deploy_index);
                     if field_symbols[symbol.deploy_turn]!.count == 0 {
                         field_symbols.removeValueForKey(symbol.deploy_turn);
                     }
                     symbol.sprite.removeFromParent();
+                    symbol_mgr.trashSymbol(symbol);
                 }
             }
         }
@@ -764,33 +779,38 @@ class GameScene: SKScene {
         var winner: (player: Bool, enemy:Bool) = (false, false);
         
         for t in field_symbols.keys {
-            let symbols = field_symbols[t]!;
-            for i in symbols.keys {
-                let symbol = symbols[i]!;
-                if symbol.symbol.counter {
+            for op in field_symbols[t]!.keys {
+                
+                let get_symbol = symbol_mgr.getSymbol(field_symbols[t]![op]!);
+                if get_symbol.result == false {
+                    continue;
+                }
+                let symbol = get_symbol.symbol!;
+                if symbol.counter {
                     continue;
                 }
                 var remove = false;
-                if symbol.player && symbol.symbol.rc.r == rows-1 {
+                if symbol.player && symbol.rc.r == rows-1 {
                     // TODO:相手ダメージ演出
-                    enemy_hp -= symbol.symbol.param.hp;
+                    enemy_hp -= symbol.param.hp;
                     print("enemy lastHP:\(enemy_hp)");
                     remove = true;
                 }
-                else if symbol.enemy && symbol.symbol.rc.r == 0 {
+                else if symbol.enemy && symbol.rc.r == 0 {
                     // TODO:自分ダメージ演出
-                    player_hp -= symbol.symbol.param.hp;
+                    player_hp -= symbol.param.hp;
                     print("player lastHP:\(player_hp)");
                     remove = true;
                 }
                 
                 if remove {
-                    fields[getFieldsIndex(symbol.symbol.rc)].symbol = nil;
-                    field_symbols[symbol.symbol.deploy_turn]!.removeValueForKey(symbol.symbol.deploy_index);
-                    if field_symbols[symbol.symbol.deploy_turn]!.count == 0 {
-                        field_symbols.removeValueForKey(symbol.symbol.deploy_turn);
+                    fields[getFieldsIndex(symbol.rc)].removeSymbol(symbol.unique);
+                    field_symbols[symbol.deploy_turn]!.removeValueForKey(symbol.deploy_index);
+                    if field_symbols[symbol.deploy_turn]!.count == 0 {
+                        field_symbols.removeValueForKey(symbol.deploy_turn);
                     }
-                    symbol.symbol.sprite.removeFromParent();
+                    symbol.sprite.removeFromParent();
+                    symbol_mgr.trashSymbol(symbol);
                 }
             }
         }

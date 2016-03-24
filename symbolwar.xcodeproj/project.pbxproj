@@ -22,6 +22,7 @@
 		508589281C97BDD600C48B25 /* Triangle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508589271C97BDD600C48B25 /* Triangle.swift */; };
 		5085892A1C97BE9000C48B25 /* Circle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508589291C97BE9000C48B25 /* Circle.swift */; };
 		5085892D1C97D19000C48B25 /* Field.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5085892C1C97D19000C48B25 /* Field.swift */; };
+		50C03DAF1CA37D3600348613 /* SymbolMgr.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C03DAE1CA37D3600348613 /* SymbolMgr.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +64,7 @@
 		508589271C97BDD600C48B25 /* Triangle.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Triangle.swift; sourceTree = "<group>"; };
 		508589291C97BE9000C48B25 /* Circle.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Circle.swift; sourceTree = "<group>"; };
 		5085892C1C97D19000C48B25 /* Field.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Field.swift; sourceTree = "<group>"; };
+		50C03DAE1CA37D3600348613 /* SymbolMgr.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SymbolMgr.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -148,6 +150,7 @@
 		508589201C97B6FA00C48B25 /* Symbols */ = {
 			isa = PBXGroup;
 			children = (
+				50C03DAE1CA37D3600348613 /* SymbolMgr.swift */,
 				508589211C97B72100C48B25 /* Symbol.swift */,
 				508589271C97BDD600C48B25 /* Triangle.swift */,
 				508589231C97BCC100C48B25 /* Square.swift */,
@@ -297,6 +300,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				50C03DAF1CA37D3600348613 /* SymbolMgr.swift in Sources */,
 				508589241C97BCC200C48B25 /* Square.swift in Sources */,
 				5085892A1C97BE9000C48B25 /* Circle.swift in Sources */,
 				508588F01C97B64500C48B25 /* GameScene.swift in Sources */,
@@ -534,6 +538,7 @@
 				508589161C97B64500C48B25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		508589171C97B64500C48B25 /* Build configuration list for PBXNativeTarget "symbolwarTests" */ = {
 			isa = XCConfigurationList;
@@ -542,6 +547,7 @@
 				508589191C97B64500C48B25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		5085891A1C97B64500C48B25 /* Build configuration list for PBXNativeTarget "symbolwarUITests" */ = {
 			isa = XCConfigurationList;
@@ -550,6 +556,7 @@
 				5085891C1C97B64500C48B25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

@@ -9,7 +9,7 @@ class Triangle: Symbol {
         image_name = Symbol.getSymbolName(type);
         sprite = SKSpriteNode(imageNamed: image_name);
         
-        attack_target_list = ["ff", "bl", "br"];
+        attack_target_list = ["ff", "ml", "mr"];
         initParam();
         updateParamSprite();
     }

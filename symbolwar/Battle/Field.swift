@@ -12,7 +12,18 @@ class Field {
     var player_field = false;
     var enemy_field = false;
     
-    var symbol: Symbol? = nil;
+    var symbols: [Int] = [];
+    func deploySymbol(uniq: Int) {
+        symbols.append(uniq);
+    }
+    func removeSymbol(uniq: Int) {
+        for i in 0 ..< symbols.count {
+            if symbols[i] == uniq {
+                symbols.removeAtIndex(i);
+                break;
+            }
+        }
+    }
     
     init(r: Int, c: Int) {
         self.row = r;

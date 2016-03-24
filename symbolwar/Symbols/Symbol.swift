@@ -2,6 +2,8 @@ import SpriteKit
 
 class Symbol {
     
+    var unique: Int = 0;
+    
     enum SYMBOL_TYPE {
         case triangle, square, star, circle
     }
@@ -29,6 +31,7 @@ class Symbol {
     
     var attack_target: [String : Bool] = [
         "fl" : false, "ff" : false, "fr" : false,
+        "ml" : false, "mr" : false,
         "bl" : false, "bb" : false, "br" : false
     ];
     var attack_target_list: [String] = [];
